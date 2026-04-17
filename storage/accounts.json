@@ -1,0 +1,23 @@
+{
+  "accounts": [
+    {
+      "id": "acct_58b5f395a7ecbe58",
+      "tenantId": "default",
+      "username": "admin",
+      "email": "admin@example.com",
+      "displayName": "Playground Admin",
+      "passwordHash": "pbkdf2$sha256$120000$TYsXHDLyEWhaK7QktRQMuA$8ITktWTyzPNBCWIVa9i4ClUqoUW64cA73iPLQ7HM6UI",
+      "roles": [
+        "admin"
+      ],
+      "permissions": [
+        "accounts:read",
+        "accounts:write"
+      ],
+      "status": "active",
+      "version": 1,
+      "createdAt": "2026-04-14T08:18:55.9537528Z",
+      "updatedAt": "2026-04-14T08:18:55.9537528Z"
+    }
+  ]
+}
