@@ -10,6 +10,7 @@ import (
 	"time"
 
 	domainaccount "playground/internal/domain/account"
+	domainevents "playground/internal/domain/events"
 	domainrole "playground/internal/domain/role"
 )
 
@@ -34,11 +35,12 @@ type PasswordHasher interface {
 }
 
 type Service struct {
-	repo     Repository
-	roles    RoleReader
-	hasher   PasswordHasher
-	now      func() time.Time
-	idSource func() string
+	repo      Repository
+	roles     RoleReader
+	hasher    PasswordHasher
+	publisher domainevents.Publisher
+	now       func() time.Time
+	idSource  func() string
 }
 
 type CreateAccountInput struct {
@@ -78,13 +80,14 @@ type PageResult struct {
 	TotalPages int
 }
 
-func NewService(repo Repository, roles RoleReader, hasher PasswordHasher, now func() time.Time) Service {
+func NewService(repo Repository, roles RoleReader, hasher PasswordHasher, publisher domainevents.Publisher, now func() time.Time) Service {
 	return Service{
-		repo:     repo,
-		roles:    roles,
-		hasher:   hasher,
-		now:      now,
-		idSource: newAccountID,
+		repo:      repo,
+		roles:     roles,
+		hasher:    hasher,
+		publisher: publisher,
+		now:       now,
+		idSource:  newAccountID,
 	}
 }
 
@@ -171,6 +174,11 @@ func (s Service) UpdateAccount(ctx context.Context, id string, input UpdateAccou
 	if err := s.repo.Update(ctx, item); err != nil {
 		return domainaccount.Account{}, err
 	}
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, item.PullEvents()...); err != nil {
+			return domainaccount.Account{}, err
+		}
+	}
 
 	return item, nil
 }
@@ -197,12 +205,29 @@ func (s Service) ChangePassword(ctx context.Context, id string, input ChangePass
 	if err := s.repo.Update(ctx, item); err != nil {
 		return domainaccount.Account{}, err
 	}
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, item.PullEvents()...); err != nil {
+			return domainaccount.Account{}, err
+		}
+	}
 
 	return item, nil
 }
 
 func (s Service) DeleteAccount(ctx context.Context, id string) error {
-	return s.repo.Delete(ctx, strings.TrimSpace(id))
+	item, err := s.repo.GetByID(ctx, strings.TrimSpace(id))
+	if err != nil {
+		return err
+	}
+
+	if err := s.repo.Delete(ctx, item.ID); err != nil {
+		return err
+	}
+	item.MarkDeleted(s.now())
+	if s.publisher != nil {
+		return s.publisher.Publish(ctx, item.PullEvents()...)
+	}
+	return nil
 }
 
 func (s Service) EnsureBootstrapAdmin(ctx context.Context, input CreateAccountInput) (domainaccount.Account, bool, error) {

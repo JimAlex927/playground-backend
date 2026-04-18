@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	domainevents "playground/internal/domain/events"
 )
 
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9._-]{3,32}$`)
@@ -32,6 +34,7 @@ type Account struct {
 	Version      int       `json:"version"`
 	CreatedAt    time.Time `json:"createdAt"`
 	UpdatedAt    time.Time `json:"updatedAt"`
+	events       []domainevents.Event
 }
 
 type CreateParams struct {
@@ -147,6 +150,11 @@ func (a *Account) UpdateProfile(params UpdateProfileParams) error {
 	//TODO  修改profile不能修改version
 	//a.Version++
 	a.UpdatedAt = params.Now.UTC()
+	a.recordEvent(ProfileUpdated{
+		AccountID: a.ID,
+		TenantID:  a.TenantID,
+		At:        a.UpdatedAt,
+	})
 
 	return nil
 }
@@ -159,6 +167,11 @@ func (a *Account) ChangePassword(passwordHash string, now time.Time) error {
 	a.PasswordHash = passwordHash
 	a.Version++
 	a.UpdatedAt = now.UTC()
+	a.recordEvent(PasswordChanged{
+		AccountID: a.ID,
+		TenantID:  a.TenantID,
+		At:        a.UpdatedAt,
+	})
 	return nil
 }
 

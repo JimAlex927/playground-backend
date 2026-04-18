@@ -10,11 +10,14 @@ import (
 	"time"
 
 	appaccount "playground/internal/application/account"
+	appauth "playground/internal/application/auth"
 	appcredential "playground/internal/application/credential"
+	appeventing "playground/internal/application/eventing"
 	apppermission "playground/internal/application/permission"
 	approle "playground/internal/application/role"
 	appupload "playground/internal/application/upload"
 	"playground/internal/config"
+	rediscache "playground/internal/infrastructure/cache/redis"
 	inframinio "playground/internal/infrastructure/minio"
 	persistmysql "playground/internal/infrastructure/persistence/mysql"
 	"playground/internal/infrastructure/security"
@@ -97,9 +100,19 @@ func main() {
 		panic(err)
 	}
 	tokens := security.NewTokenManager(cfg.TokenSecret)
+	redisClient, err := rediscache.NewClient(cfg.Redis)
+	if err != nil {
+		logger.Error("open redis failed", zap.Error(err))
+		panic(err)
+	}
+	if redisClient != nil {
+		defer func() { _ = redisClient.Close() }()
+	}
+	principalCache := rediscache.NewPrincipalCache(redisClient, cfg.Redis)
+	publisher := appeventing.NewInProcessPublisher(appauth.NewPrincipalCacheInvalidationHandler(principalCache))
 	permissionService := apppermission.NewService(permissionRepo, time.Now)
-	roleService := approle.NewService(roleRepo, repo, permissionService, time.Now)
-	accountService := appaccount.NewService(repo, roleRepo, hasher, time.Now)
+	roleService := approle.NewService(roleRepo, repo, permissionService, publisher, time.Now)
+	accountService := appaccount.NewService(repo, roleRepo, hasher, publisher, time.Now)
 	credentialService := appcredential.NewService(credentialRepo, fieldCipher, time.Now)
 
 	// Upload：根据配置选择存储后端，只改这里，上层代码零改动。

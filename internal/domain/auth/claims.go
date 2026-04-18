@@ -3,14 +3,12 @@ package auth
 import "time"
 
 type Claims struct {
-	UserID      string    `json:"sub"`
-	TenantID    string    `json:"tenant_id"`
-	Username    string    `json:"username"`
-	Roles       []string  `json:"roles,omitempty"`
-	Permissions []string  `json:"permissions,omitempty"`
-	Version     int       `json:"version"`
-	IssuedAt    time.Time `json:"iat"`
-	ExpiresAt   time.Time `json:"exp"`
+	UserID    string    `json:"sub"`
+	TenantID  string    `json:"tenant_id"`
+	Username  string    `json:"username"`
+	Version   int       `json:"version"`
+	IssuedAt  time.Time `json:"iat"`
+	ExpiresAt time.Time `json:"exp"`
 }
 
 type Principal struct {

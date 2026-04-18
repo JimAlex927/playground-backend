@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	domainevents "playground/internal/domain/events"
 	domainrole "playground/internal/domain/role"
 )
 
@@ -32,6 +33,7 @@ type Service struct {
 	repo        Repository
 	accountUses AccountUsageReader
 	permissions PermissionResolver
+	publisher   domainevents.Publisher
 	now         func() time.Time
 	idSource    func() string
 }
@@ -49,11 +51,12 @@ type UpdateInput struct {
 	Permissions []string `json:"permissions"`
 }
 
-func NewService(repo Repository, accountUses AccountUsageReader, permissions PermissionResolver, now func() time.Time) Service {
+func NewService(repo Repository, accountUses AccountUsageReader, permissions PermissionResolver, publisher domainevents.Publisher, now func() time.Time) Service {
 	return Service{
 		repo:        repo,
 		accountUses: accountUses,
 		permissions: permissions,
+		publisher:   publisher,
 		now:         now,
 		idSource:    newRoleID,
 	}
@@ -118,6 +121,11 @@ func (s Service) UpdateRole(ctx context.Context, tenantID, id string, input Upda
 	if err := s.repo.Update(ctx, item); err != nil {
 		return domainrole.Role{}, err
 	}
+	if s.publisher != nil {
+		if err := s.publisher.Publish(ctx, item.PullEvents()...); err != nil {
+			return domainrole.Role{}, err
+		}
+	}
 	return item, nil
 }
 
@@ -133,7 +141,10 @@ func (s Service) DeleteRole(ctx context.Context, tenantID, id string) error {
 			return fmt.Errorf("role is assigned to %d users", total)
 		}
 	}
-	return s.repo.Delete(ctx, normalizedTenant, normalizedID)
+	if err := s.repo.Delete(ctx, normalizedTenant, normalizedID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s Service) EnsureDefaultRoles(ctx context.Context, tenantID string) (map[string]domainrole.Role, error) {

@@ -114,6 +114,17 @@ PLAYGROUND_APP_HTTP_ADDR=:8090
 PLAYGROUND_CREDENTIAL_SECRET_KEY=change-me-before-production
 ```
 
+Redis 鉴权缓存配置：
+
+```powershell
+PLAYGROUND_REDIS_ENABLED=true
+PLAYGROUND_REDIS_ADDR=127.0.0.1:6379
+PLAYGROUND_REDIS_DB=0
+PLAYGROUND_REDIS_KEY_PREFIX=playground
+PLAYGROUND_REDIS_PRINCIPAL_TTL=10m
+PLAYGROUND_REFRESH_TOKEN_TTL=168h
+```
+
 ## 启动
 
 认证服务：
@@ -140,6 +151,7 @@ go run ./cmd/app-service
 
 - `GET /healthz`
 - `POST /auth/login`
+- `POST /auth/refresh`
 - `GET /auth/me`
 - `POST /auth/logout`
 - `ANY /internal/auth/verify`
@@ -150,6 +162,14 @@ go run ./cmd/app-service
 {
   "login": "admin",
   "passwordBase64": "Q2hhbmdlTWUxMjMh"
+}
+```
+
+刷新 token 请求体示例：
+
+```json
+{
+  "refreshToken": "opaque-refresh-token"
 }
 ```
 
@@ -191,6 +211,39 @@ PLAYGROUND_LOG_FILE_DIR=storage/logs
 - Traefik 已把 `/auth` 路由给 `auth-service`
 - Traefik 的 `forwardAuth` 会调用 `/internal/auth/verify`
 - 业务接口放在 `/api/...`，由 `app-service` 提供
+
+## 鉴权缓存
+
+当前 bearer token 只携带：
+
+- `sub`
+- `tenant_id`
+- `username`
+- `version`
+
+角色和权限不再放进 token，而是在 `forwardAuth` 的 `/internal/auth/verify` 中按下面流程获取：
+
+1. 解析 token，拿到 `tenantId/userId/version`
+2. 先查 Redis principal 缓存
+3. 未命中时回源 MySQL
+4. 将 principal 写回 Redis
+5. 通过 `X-Auth-*` 头转发给业务服务
+
+同时支持 opaque refresh token：
+
+1. 登录时签发 `accessToken + refreshToken`
+2. `accessToken` 过期后，调用 `/auth/refresh`
+3. 服务端校验 Redis 中的 refresh session、账号状态和 `version`
+4. 成功后轮换 refresh token，并签发新的 access token
+
+缓存失效改成了领域事件驱动：
+
+- `Account.ProfileUpdated`
+- `Account.PasswordChanged`
+- `Account.Deleted`
+- `Role.Updated`
+
+应用层事件处理器再根据这些业务事件去失效 Redis principal 缓存。
 
 ## 后续建议
 

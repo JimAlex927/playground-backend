@@ -112,7 +112,10 @@ func (s Service) DeletePermission(ctx context.Context, tenantID, id string) erro
 		return fmt.Errorf("permission is assigned to %d roles", total)
 	}
 
-	return s.repo.Delete(ctx, item.TenantID, item.ID)
+	if err := s.repo.Delete(ctx, item.TenantID, item.ID); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s Service) EnsureDefaultPermissions(ctx context.Context, tenantID string) ([]domainpermission.Permission, error) {

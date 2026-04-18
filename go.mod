@@ -1,6 +1,6 @@
 module playground
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.2
@@ -9,6 +9,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/minio/minio-go/v7 v7.0.100
 	github.com/nacos-group/nacos-sdk-go/v2 v2.3.5
+	github.com/redis/go-redis/v9 v9.14.0
 	github.com/tus/tusd/v2 v2.9.2
 	go.uber.org/zap v1.27.1
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
@@ -52,6 +53,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/clbanning/mxj/v2 v2.5.5 // indirect
 	github.com/deckarep/golang-set v1.7.1 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
 	github.com/golang/mock v1.6.0 // indirect

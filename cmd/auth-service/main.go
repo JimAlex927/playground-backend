@@ -11,9 +11,11 @@ import (
 
 	appaccount "playground/internal/application/account"
 	appauth "playground/internal/application/auth"
+	appeventing "playground/internal/application/eventing"
 	apppermission "playground/internal/application/permission"
 	approle "playground/internal/application/role"
 	"playground/internal/config"
+	rediscache "playground/internal/infrastructure/cache/redis"
 	persistmysql "playground/internal/infrastructure/persistence/mysql"
 	"playground/internal/infrastructure/security"
 	authhttp "playground/internal/interfaces/http/auth"
@@ -87,9 +89,20 @@ func main() {
 	roleRepo := persistmysql.NewRoleRepository(db)
 	hasher := security.NewPasswordHasher(120_000, 16, 32)
 	tokens := security.NewTokenManager(cfg.TokenSecret)
+	redisClient, err := rediscache.NewClient(cfg.Redis)
+	if err != nil {
+		logger.Error("open redis failed", zap.Error(err))
+		panic(err)
+	}
+	if redisClient != nil {
+		defer func() { _ = redisClient.Close() }()
+	}
+	principalCache := rediscache.NewPrincipalCache(redisClient, cfg.Redis)
+	refreshStore := rediscache.NewRefreshSessionStore(redisClient, cfg.Redis)
+	publisher := appeventing.NewInProcessPublisher(appauth.NewPrincipalCacheInvalidationHandler(principalCache))
 	permissionService := apppermission.NewService(permissionRepo, time.Now)
-	roleService := approle.NewService(roleRepo, repo, permissionService, time.Now)
-	accountService := appaccount.NewService(repo, roleRepo, hasher, time.Now)
+	roleService := approle.NewService(roleRepo, repo, permissionService, publisher, time.Now)
+	accountService := appaccount.NewService(repo, roleRepo, hasher, publisher, time.Now)
 
 	if _, err := permissionService.EnsureDefaultPermissions(context.Background(), cfg.BootstrapAdmin.TenantID); err != nil {
 		logger.Error("ensure default permissions failed", zap.Error(err))
@@ -117,7 +130,7 @@ func main() {
 		logger.Info("bootstrap admin created", zap.String("username", cfg.BootstrapAdmin.Username))
 	}
 
-	authService := appauth.NewService(repo, hasher, tokens, cfg.TokenTTL)
+	authService := appauth.NewService(repo, hasher, tokens, principalCache, refreshStore, cfg.TokenTTL, cfg.RefreshTokenTTL)
 	handler := httpx.Chain(
 		authhttp.NewHandler(authService),
 		httpx.Recover(logger),

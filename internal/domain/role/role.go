@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	domainevents "playground/internal/domain/events"
 )
 
 type Role struct {
@@ -14,6 +16,7 @@ type Role struct {
 	Permissions []string  `json:"permissions,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 	UpdatedAt   time.Time `json:"updatedAt"`
+	events      []domainevents.Event
 }
 
 type CreateParams struct {
@@ -74,6 +77,12 @@ func (r *Role) Update(params UpdateParams) error {
 	r.Description = normalizeDescription(params.Description)
 	r.Permissions = permissions
 	r.UpdatedAt = params.Now.UTC()
+	r.recordEvent(Updated{
+		RoleID:   r.ID,
+		TenantID: r.TenantID,
+		Name:     r.Name,
+		Occurred: r.UpdatedAt,
+	})
 	return nil
 }
 

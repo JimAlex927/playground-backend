@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -23,6 +24,7 @@ func NewHandler(service appauth.Service) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handler.handleHealth)
 	mux.HandleFunc("POST /auth/login", handler.handleLogin)
+	mux.HandleFunc("POST /auth/refresh", handler.handleRefresh)
 	mux.HandleFunc("GET /auth/me", handler.handleMe)
 	mux.HandleFunc("POST /auth/logout", handler.handleLogout)
 	mux.HandleFunc("/internal/auth/verify", handler.handleVerify)
@@ -34,6 +36,14 @@ type loginRequest struct {
 	Login          string `json:"login"`
 	Password       string `json:"password"`
 	PasswordBase64 string `json:"passwordBase64"`
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refreshToken"`
+}
+
+type logoutRequest struct {
+	RefreshToken string `json:"refreshToken"`
 }
 
 func (h Handler) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -73,11 +83,39 @@ func (h Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"accessToken": result.AccessToken,
-		"tokenType":   result.TokenType,
-		"expiresAt":   result.ExpiresAt,
-		"expiresIn":   result.ExpiresIn,
-		"user":        toUserPayload(result.User),
+		"accessToken":      result.AccessToken,
+		"tokenType":        result.TokenType,
+		"expiresAt":        result.ExpiresAt,
+		"expiresIn":        result.ExpiresIn,
+		"refreshToken":     result.RefreshToken,
+		"refreshExpiresAt": result.RefreshExpiresAt,
+		"refreshExpiresIn": result.RefreshExpiresIn,
+		"user":             toUserPayload(result.User),
+	})
+}
+
+func (h Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
+	var request refreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		httpx.WriteError(w, http.StatusBadRequest, "request body must be valid JSON")
+		return
+	}
+
+	result, err := h.service.Refresh(r.Context(), request.RefreshToken)
+	if err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
+	httpx.WriteJSON(w, http.StatusOK, map[string]any{
+		"accessToken":      result.AccessToken,
+		"tokenType":        result.TokenType,
+		"expiresAt":        result.ExpiresAt,
+		"expiresIn":        result.ExpiresIn,
+		"refreshToken":     result.RefreshToken,
+		"refreshExpiresAt": result.RefreshExpiresAt,
+		"refreshExpiresIn": result.RefreshExpiresIn,
+		"user":             toUserPayload(result.User),
 	})
 }
 
@@ -120,9 +158,22 @@ func (h Handler) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h Handler) handleLogout(w http.ResponseWriter, _ *http.Request) {
+func (h Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
+	var request logoutRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil && !errors.Is(err, io.EOF) {
+			httpx.WriteError(w, http.StatusBadRequest, "request body must be valid JSON")
+			return
+		}
+	}
+
+	if err := h.service.Logout(r.Context(), request.RefreshToken); err != nil {
+		writeAuthError(w, err)
+		return
+	}
+
 	httpx.WriteJSON(w, http.StatusOK, map[string]any{
-		"message": "logout acknowledged, remove the bearer token on the client side",
+		"message": "logout acknowledged, remove the bearer token and refresh token on the client side",
 	})
 }
 

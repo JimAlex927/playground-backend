@@ -38,6 +38,16 @@ type DatabaseConfig struct {
 	ConnMaxLifetime time.Duration
 }
 
+type RedisConfig struct {
+	Enabled      bool
+	Addr         string
+	Username     string
+	Password     string
+	DB           int
+	KeyPrefix    string
+	PrincipalTTL time.Duration
+}
+
 type NacosConfig struct {
 	Enabled     bool
 	ServerAddrs []string
@@ -70,10 +80,12 @@ type MinioConfig struct {
 type CommonConfig struct {
 	Nacos               NacosConfig
 	Database            DatabaseConfig
+	Redis               RedisConfig
 	Upload              UploadConfig
 	Minio               MinioConfig
 	TokenSecret         string
 	TokenTTL            time.Duration
+	RefreshTokenTTL     time.Duration
 	CredentialSecretKey string
 	CORSAllowedOrigins  []string
 	AllowDirectToken    bool
@@ -132,6 +144,15 @@ func loadCommonConfig() CommonConfig {
 			MaxIdleConns:    getInt("PLAYGROUND_DB_MAX_IDLE_CONNS", 5),
 			ConnMaxLifetime: getDuration("PLAYGROUND_DB_CONN_MAX_LIFETIME", 30*time.Minute),
 		},
+		Redis: RedisConfig{
+			Enabled:      getBool("PLAYGROUND_REDIS_ENABLED", false),
+			Addr:         getEnv("PLAYGROUND_REDIS_ADDR", "127.0.0.1:6379"),
+			Username:     getEnv("PLAYGROUND_REDIS_USERNAME", ""),
+			Password:     getEnv("PLAYGROUND_REDIS_PASSWORD", ""),
+			DB:           getInt("PLAYGROUND_REDIS_DB", 0),
+			KeyPrefix:    getEnv("PLAYGROUND_REDIS_KEY_PREFIX", "playground"),
+			PrincipalTTL: getDuration("PLAYGROUND_REDIS_PRINCIPAL_TTL", 10*time.Minute),
+		},
 		Upload: UploadConfig{
 			Dir:     getEnv("PLAYGROUND_UPLOAD_DIR", "storage/uploads"),
 			MaxSize: int64(getInt("PLAYGROUND_UPLOAD_MAX_SIZE_MB", 100)) * 1024 * 1024,
@@ -147,6 +168,7 @@ func loadCommonConfig() CommonConfig {
 		},
 		TokenSecret:         getEnv("PLAYGROUND_TOKEN_SECRET", "change-me-before-production"),
 		TokenTTL:            getDuration("PLAYGROUND_TOKEN_TTL", 24*time.Hour),
+		RefreshTokenTTL:     getDuration("PLAYGROUND_REFRESH_TOKEN_TTL", 168*time.Hour),
 		CredentialSecretKey: getEnv("PLAYGROUND_CREDENTIAL_SECRET_KEY", getEnv("PLAYGROUND_TOKEN_SECRET", "change-me-before-production")),
 		CORSAllowedOrigins:  getList("PLAYGROUND_CORS_ALLOWED_ORIGINS", []string{"http://localhost:5173", "http://127.0.0.1:5173", "http://localhost"}),
 		AllowDirectToken:    getBool("PLAYGROUND_ALLOW_DIRECT_TOKEN", true),
